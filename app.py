@@ -93,26 +93,38 @@ POOL_ID = st.secrets.get("COGNITO_USER_POOL_ID", "YOUR_POOL_ID")
 APP_CLIENT_ID = st.secrets.get("COGNITO_APP_CLIENT_ID", "YOUR_CLIENT_ID")
 APP_CLIENT_SECRET = st.secrets.get("COGNITO_APP_CLIENT_SECRET", "YOUR_CLIENT_SECRET")
 
+# Session state 초기화
+if "is_logged_in" not in st.session_state:
+    st.session_state.is_logged_in = False
+if "authenticator" not in st.session_state:
+    st.session_state.authenticator = None
+
 # 키를 입력하지 않은 초기 실행 상태면 바로 화면을 볼 수 있게 테스트 모드로 통과시킵니다.
-is_logged_in = False
 if POOL_ID == "YOUR_POOL_ID":
-    is_logged_in = True
+    st.session_state.is_logged_in = True
     st.sidebar.warning("⚠️ 테스트 모드 (Cognito 연동 전)")
 else:
-    authenticator = CognitoAuthenticator(
-        pool_id=POOL_ID,
-        app_client_id=APP_CLIENT_ID,
-        app_client_secret=APP_CLIENT_SECRET,
-    )
-    is_logged_in = authenticator.login()
+    if st.session_state.authenticator is None:
+        st.session_state.authenticator = CognitoAuthenticator(
+            pool_id=POOL_ID,
+            app_client_id=APP_CLIENT_ID,
+            app_client_secret=APP_CLIENT_SECRET,
+        )
+    
+    # 이미 로그인되어 있지 않으면 로그인 시도
+    if not st.session_state.is_logged_in:
+        st.session_state.is_logged_in = st.session_state.authenticator.login()
 
-if not is_logged_in:
+if not st.session_state.is_logged_in:
     st.info("Go-Ti 보안팀 Admin 시스템입니다. AWS Cognito 계정으로 로그인해주세요.")
     st.stop()
 
 def logout():
+    """로그아웃 함수"""
     if POOL_ID != "YOUR_POOL_ID":
-        authenticator.logout()
+        st.session_state.authenticator.logout()
+    st.session_state.is_logged_in = False
+    st.session_state.authenticator = None
 
 # --- 2. Upstage API 클라이언트 ---
 UPSTAGE_API_KEY = st.secrets.get("UPSTAGE_API_KEY", "YOUR_UPSTAGE_API_KEY")
