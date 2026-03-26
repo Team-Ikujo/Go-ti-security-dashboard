@@ -9,6 +9,19 @@ from datetime import datetime, timedelta
 import base64  # Basic Auth 인증용
 import urllib3  # SSL 경고 억제
 
+# 앱 최상단에 배치
+hide_st_style = """
+            <style>
+            #MainMenu, header, footer {visibility: hidden;}
+            /* 깃허브 아이콘, 툴바, 워터마크 제거 */
+            div[data-testid="stToolbar"], div[data-testid="stDecoration"], 
+            div[data-testid="stStatusWidget"], #GithubIcon {display: none !important;}
+            /* 배포자 마크 및 하단 워터마크 제거 */
+            .viewerBadge_container__1QSob {display: none !important;}
+            </style>
+            """
+st.markdown(hide_st_style, unsafe_allow_html=True)
+
 if not hasattr(st, "experimental_rerun"):
     st.experimental_rerun = st.rerun
 
