@@ -9,6 +9,9 @@ from datetime import datetime, timedelta
 import base64  # Basic Auth 인증용
 import urllib3  # SSL 경고 억제
 
+if not hasattr(st, "experimental_rerun"):
+    st.experimental_rerun = st.rerun
+    
 # SSL 경고 억제 (개발 환경 자체 서명 인증서 사용 시)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
