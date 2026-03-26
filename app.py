@@ -11,38 +11,16 @@ import urllib3  # SSL 경고 억제
 
 # 앱 최상단에 배치
 
-hide_streamlit_style = """
-                <style>
-                div[data-testid="stToolbar"] {
-                visibility: hidden;
-                height: 0%;
-                position: fixed;
-                }
-                div[data-testid="stDecoration"] {
-                visibility: hidden;
-                height: 0%;
-                position: fixed;
-                }
-                div[data-testid="stStatusWidget"] {
-                visibility: hidden;
-                height: 0%;
-                position: fixed;
-                }
-                #MainMenu {
-                visibility: hidden;
-                height: 0%;
-                }
-                header {
-                visibility: hidden;
-                height: 0%;
-                }
-                footer {
-                visibility: hidden;
-                height: 0%;
-                }
-                </style>
-                """
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+st.markdown(
+    """
+    <style>
+    .stAppToolbar, .stToolbar, .css-1ekf3uw, ._profileContainer_gzau3_53, ._container_gzau3_1, ._viewerBadge_nim44_23 {
+        display: none !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 if not hasattr(st, "experimental_rerun"):
     st.experimental_rerun = st.rerun
