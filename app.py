@@ -22,13 +22,14 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-if not hasattr(st, "experimental_rerun"):
-    st.experimental_rerun = st.rerun
+# if not hasattr(st, "experimental_rerun"):
+#     st.experimental_rerun = st.rerun
 
-# SSL 경고 억제 (개발 환경 자체 서명 인증서 사용 시)
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# # SSL 경고 억제 (개발 환경 자체 서명 인증서 사용 시)
+# urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 st.set_page_config(page_title="Go-Ti Security Admin", layout="wide")
+
 
 # --- DB 연결 및 데이터 로드 예시 ---
 def load_history_from_db():
