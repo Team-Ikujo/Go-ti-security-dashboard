@@ -1,5 +1,8 @@
+[global]
+showWarningOnDirectExecution = false
 [client]
-toolbarMode = “minimal”
+toolbarMode = "minimal"
+showErrorDetails = "none"
 
 [ui]
 hideTopBar = true
