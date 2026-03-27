@@ -14,8 +14,8 @@ import urllib3  # SSL 경고 억제
 st.markdown(
     """
     <style>
-    .stAppToolbar, .stToolbar, .css-1ekf3uw, ._profileContainer_gzau3_53, ._container_gzau3_1, ._viewerBadge_nim44_23 {
-        display: none !important;
+    ._profileContainer_gzau3_53, ._link_gzau3_10 {
+        visibility: hidden !important;
     }
     </style>
     """,
