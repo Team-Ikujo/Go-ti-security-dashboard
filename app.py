@@ -1,4 +1,32 @@
 import streamlit as st
+import pandas as pd
+import plotly.express as px
+from openai import OpenAI
+from streamlit_cognito_auth import CognitoAuthenticator
+import sqlite3  # DB 연동 예시
+import requests  # Grafana API 연동
+from datetime import datetime, timedelta
+import base64  # Basic Auth 인증용
+import urllib3  # SSL 경고 억제
+
+# 앱 최상단에 배치
+
+st.markdown(
+    """
+    <style>
+    ._profileContainer_gzau3_53, ._link_gzau3_10 {
+        visibility: hidden !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# if not hasattr(st, "experimental_rerun"):
+#     st.experimental_rerun = st.rerun
+
+# # SSL 경고 억제 (개발 환경 자체 서명 인증서 사용 시)
+# urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # MUST be first streamit command
 st.set_page_config(page_title="Go-Ti Security Admin", layout="wide")
