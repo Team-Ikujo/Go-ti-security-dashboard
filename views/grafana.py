@@ -5,7 +5,7 @@ from components.header import render_header
 
 def render_grafana():
     render_header("GRAFANA")
-    st.subheader("Grafana Traffic 실시간 모니터링")
+    st.subheader("👁️ Grafana Traffic 실시간 모니터링")
     
     GRAFANA_URL = st.secrets.get("GRAFANA_URL", "http://localhost:3000").rstrip("/")
     GRAFANA_USERNAME = st.secrets.get("GRAFANA_USERNAME", "admin")
