@@ -1,6 +1,6 @@
 # 🛡️ Go-Ti Security Dashboard
 
-|  | |
+| 실시간 매크로 모니터링 | 의심 유저 수동 심사 |
 |--- |----|
 |<img width="1412" height="824" alt="Image" src="https://github.com/user-attachments/assets/f0df29fd-3341-48ef-bd8c-7ccc50de8f7d" />|<img width="1412" height="824" alt="Image" src="https://github.com/user-attachments/assets/17866a52-7572-4509-b69f-5d63c0e2fc08" />|
 
