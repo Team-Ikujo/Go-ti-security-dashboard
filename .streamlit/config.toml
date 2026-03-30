@@ -1,7 +1,7 @@
 [global]
 showWarningOnDirectExecution = false
 [client]
-toolbarMode = "none"
+toolbarMode = "minimal"
 showErrorDetails = "none"
 
 [ui]
