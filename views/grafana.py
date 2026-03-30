@@ -25,19 +25,33 @@ GRAFANA_SHARE_TOKEN = "your-embed-share-token"  # 선택사항''', language="tom
         # 탭 생성
         tab1, tab2, tab3 = st.tabs(["📊 대시보드", "🚨 알러트", "ℹ️ 정보"])
         
+        GRAFANA_PUBLIC_URL = st.secrets.get("GRAFANA_PUBLIC_DASHBOARD_URL", "")
+        
         with tab1:
             st.subheader("실시간 대시보드")
             
-            # 공개 공유 토큰이 있으면 iframe으로 임베드, 없으면 링크 제공
-            if GRAFANA_SHARE_TOKEN != "YOUR_SHARE_TOKEN":
-                st.info("✅ 공개 공유 대시보드로 iframe 표시 중입니다.")
-                # 공개 공유 토큰을 사용한 임베드 URL
-                embed_url = f"{GRAFANA_URL}/render/d-solo/{GRAFANA_DASHBOARD_UID}?refresh=5s&kiosk=tv"
-                st.markdown(f'<iframe src="{embed_url}" width="100%" height="700" frameborder="0"></iframe>', unsafe_allow_html=True)
+            if GRAFANA_PUBLIC_URL:
+                # Public Dashboard URL이 설정된 경우 → 인증 없이 바로 iframe 임베드
+                st.success("✅ Grafana 공개 대시보드가 연결되었습니다.")
+                st.markdown(
+                    f'<iframe src="{GRAFANA_PUBLIC_URL}?refresh=5s&kiosk" '
+                    f'width="100%" height="700" frameborder="0"></iframe>',
+                    unsafe_allow_html=True
+                )
             else:
-                st.info("💡 **iframe 임베드를 활성화하려면:**\n\n1. Grafana → 해당 대시보드 → Share\n2. **Embed** 탭에서 Embed 옵션 복사\n3. URL의 `kiosk` 파라미터 추가: `?refresh=5s&kiosk=tv`\n4. 공유 토큰을 `secrets.toml`의 `GRAFANA_SHARE_TOKEN`에 저장")
-                
-                # 또는 직접 링크 제공
+                # Public Dashboard URL이 없는 경우 → 설정 가이드 표시
+                st.warning("⚠️ Grafana 공개 대시보드 URL이 설정되지 않았습니다.")
+                st.info(
+                    "**설정 방법:**\n\n"
+                    "1. Grafana 웹에 로그인 → 대시보드 열기\n"
+                    "2. 상단 **Share** 버튼 클릭\n"
+                    "3. **Public Dashboard** 탭 → **Enable** 토글 ON\n"
+                    "4. 생성된 URL을 `.streamlit/secrets.toml`에 추가:\n"
+                    '   ```\n'
+                    '   GRAFANA_PUBLIC_DASHBOARD_URL = "https://dev-monitoring.go-ti.shop/public-dashboards/abc123..."\n'
+                    '   ```'
+                )
+                # 직접 링크도 제공
                 grafana_dashboard_url = f"{GRAFANA_URL}/d/{GRAFANA_DASHBOARD_UID}?orgId=1&refresh=5s"
                 st.markdown(f"**[🔗 Grafana 대시보드 열기 (새 탭)]({grafana_dashboard_url})**")
         
