@@ -260,6 +260,23 @@ class ProductionDataProvider(DataProvider):
             st.error(f"⚠️ 지도 데이터 파싱 오류: {str(e)}")
             return pd.DataFrame(columns=["Country", "Lat", "Lon", "Detections"])
 
+    def get_guardrail_events(self) -> list[dict]:
+        try:
+            from utils.blocked_db import list_blocked_events, init_blocked_db
+            init_blocked_db()
+            return list_blocked_events()
+        except Exception:
+            return []
+
+    def get_mouse_macro_sessions(self) -> list[dict]:
+        """마우스 서버에서 수신된 실제 세션 데이터를 반환합니다."""
+        try:
+            from utils.blocked_db import list_mouse_macro_sessions, init_blocked_db
+            init_blocked_db()
+            return list_mouse_macro_sessions()
+        except Exception:
+            return []
+
     def get_detection_type_stats(self) -> pd.DataFrame:
         """
         TODO: 백엔드 API 스펙 확정 후 조정

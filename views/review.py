@@ -1,143 +1,165 @@
 import streamlit as st
-import time
-import json
 from components.header import render_header
-from components.charts import render_status_donut_chart
 from data.provider import get_provider
 
 
-@st.dialog("분석 리포트 상세", width="large")
-def show_opensearch_report(event_id, row_data):
-    provider = get_provider()
-    
-    st.subheader(f"🔍 {event_id} 매크로 탐지 원인 분석")
-    st.caption("OpenSearch 클러스터에 저장된 상세 백엔드 이벤트 로그입니다.")
-    st.divider()
-    
-    with st.spinner("OpenSearch에서 로우 데이터를 불러오는 중..."):
-        report = provider.get_detection_report(event_id)
-        
-    st.markdown(f"**탐지된 보안 룰 (Matched Rules):**")
-    for rule in report['matched_rules']:
-        st.error(f"🚨 {rule}")
-        
-    st.markdown("<br>**OpenSearch JSON 원본 (Raw Logs):**", unsafe_allow_html=True)
-    st.json(report)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("닫기", width="stretch"):
-        st.rerun()
+def _build_detection_summary(provider) -> tuple[list[dict], str]:
+    """가드레일 + 마우스 매크로 이벤트를 합쳐 LLM 프롬프트용 텍스트를 반환합니다."""
+    events = []
+
+    for e in provider.get_guardrail_events():
+        events.append({
+            "출처"      : "가드레일",
+            "event_id"  : e.get("event_id", ""),
+            "user_id"   : e.get("user_id") or "-",
+            "ip_address": e.get("ip_address", ""),
+            "risk_score": int(e.get("risk_score", 0) * 100),
+            "reason_codes": ", ".join(e.get("reason_codes", [])),
+            "webdriver" : e.get("webdriver", False),
+            "headless"  : e.get("headless", False),
+            "devtools"  : e.get("devtools_protocol", False),
+            "plugins"   : e.get("plugins_count", 0),
+            "languages" : e.get("languages_count", 0),
+            "detected_at": (e.get("blocked_at", "")[:19] or "").replace("T", " "),
+            "status"    : e.get("status", "Blocked"),
+        })
+
+    for s in provider.get_mouse_macro_sessions():
+        events.append({
+            "출처"      : "마우스 매크로",
+            "event_id"  : s.get("session_id", "")[:20],
+            "user_id"   : s.get("user_id") or "-",
+            "ip_address": "-",
+            "risk_score": int(s.get("probability", 0) * 100),
+            "reason_codes": f"Mouse Macro (확률 {s.get('probability',0)*100:.1f}%, 신뢰도 {s.get('confidence',0)*100:.1f}%)",
+            "webdriver" : False,
+            "headless"  : False,
+            "devtools"  : False,
+            "plugins"   : 0,
+            "languages" : 0,
+            "detected_at": s.get("detected_at", "")[:19],
+            "status"    : "Blocked",
+        })
+
+    if not events:
+        return events, ""
+
+    lines = ["다음은 최근 탐지된 의심 이벤트 목록입니다:\n"]
+    for i, e in enumerate(events, 1):
+        lines.append(
+            f"{i}. [{e['출처']}] {e['event_id']} | User: {e['user_id']} | IP: {e['ip_address']} | "
+            f"Risk: {e['risk_score']}점 | 사유: {e['reason_codes']} | 탐지: {e['detected_at']}"
+        )
+    return events, "\n".join(lines)
 
 
-def execute_review_api_call(event_id, action):
-    """
-    Provider를 통해 수동 심사 액션(Block/Pass)을 처리합니다.
-    Mock 모드에서는 세션 상태만 업데이트, Production에서는 실제 API 호출.
-    """
-    provider = get_provider()
-    success = provider.update_event_status(event_id, action)
-    
-    if success:
-        print(f"[SUCCESS] Event {event_id} status updated to {action}.")
-    else:
-        print(f"[FAIL] Event {event_id} status update failed.")
+def _llm_review_analysis(event: dict, all_summary: str) -> str:
+    try:
+        import streamlit as st
+        from utils.api import get_solar_client
 
-def handle_review_action(event_id, action):
-    """Button click callback handler."""
-    execute_review_api_call(event_id, action)
-    action_kor = "차단" if action == "Blocked" else "패스"
-    st.toast(f"✅ **{event_id}** 건에 대한 수동 **{action_kor}** 처리가 완료되었습니다.", icon="🚨" if action == "Blocked" else "✅")
+        api_key = st.secrets.get("UPSTAGE_API_KEY", "")
+        if not api_key or api_key.startswith("up_xxx"):
+            return "UPSTAGE_API_KEY가 설정되지 않았습니다."
+
+        prompt = f"""아래는 보안 탐지 시스템의 전체 이벤트 현황입니다:
+
+{all_summary}
+
+---
+위 데이터에서 다음 이벤트에 대해 수동 심사 의견을 작성해주세요:
+
+- 출처: {event['출처']}
+- Event ID: {event['event_id']}
+- User ID: {event['user_id']}
+- IP 주소: {event['ip_address']}
+- Risk Score: {event['risk_score']}점
+- 탐지 사유: {event['reason_codes']}
+- Webdriver: {event['webdriver']} / Headless: {event['headless']} / DevTools: {event['devtools']}
+- 탐지 시각: {event['detected_at']}
+
+다음 항목으로 간결하게 답변해주세요:
+1. **판단**: 차단 유지 / 해제 권고 중 하나
+2. **근거**: 위 데이터 기반으로 2~3문장
+3. **추가 조치**: 필요한 경우 권고사항"""
+
+        client = get_solar_client()
+        resp = client.chat.completions.create(
+            model="solar-pro",
+            messages=[
+                {"role": "system", "content": "당신은 사이버 보안 분석가입니다. 매크로 탐지 데이터를 바탕으로 의심 유저를 심사합니다."},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=500,
+            temperature=0.2,
+        )
+        return resp.choices[0].message.content
+    except Exception as ex:
+        return f"분석 실패: {ex}"
+
 
 def render_review():
     provider = get_provider()
-    
     render_header("MANUAL REVIEW")
-    st.header("고위험 계정 수동 검토")
-    st.write("실시간 AI 탐지로 적발된 이력 중 추가 확인이 필요한 건(Pending/Warning)에 대해 수동 검토를 진행합니다.")
+    st.header("의심 유저 수동 심사")
+    st.write("탐지 시스템에서 수신된 가드레일·마우스 매크로 이벤트를 바탕으로 LLM이 심사 의견을 제공합니다.")
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Provider에서 글로벌 히스토리 데이터 가져오기
-    df = provider.get_enriched_history()
-    
-    if df.empty:
-        st.success("데이터가 로드되지 않았습니다.")
+    events, summary_text = _build_detection_summary(provider)
+
+    if not events:
+        st.info("심사할 탐지 이벤트가 없습니다.")
         return
 
-    # 1. 상단에 대시보드와 동일한 매크로 조치 현황 차트 렌더링
-    st.markdown('<div class="section-title">매크로 조치 현황 (Global View)</div>', unsafe_allow_html=True)
-    with st.container(border=True):
-        st.markdown('<div class="chart-bg-target"></div>', unsafe_allow_html=True)
-        render_status_donut_chart(df, height=180)
-        
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # 2. 필터링 컨트롤 UI 추가
-    st.markdown('<div class="section-title">검토 목록 필터링</div>', unsafe_allow_html=True)
-    filter_col1, filter_col2, filter_col3 = st.columns(3)
-    
-    # 중복 제거된 옵션 추출
-    available_dates = sorted(df["접속일자"].unique().tolist(), reverse=True)
-    available_games = sorted(df["대상 경기"].unique().tolist())
-    
-    with filter_col1:
-        selected_dates = st.multiselect("📅 날짜", available_dates, default=available_dates)
-    with filter_col2:
-        selected_games = st.multiselect("⚾ 대상 경기", available_games, default=available_games)
-    with filter_col3:
-        selected_status = st.multiselect("🚥 심사 상태", ["Pending", "Warning", "Blocked", "Passed"], default=["Pending", "Warning"])
+    # 필터
+    sources = sorted({e["출처"] for e in events})
+    statuses = sorted({e["status"] for e in events})
+    col_f1, col_f2 = st.columns(2)
+    with col_f1:
+        sel_source = st.multiselect("출처 필터", sources, default=sources)
+    with col_f2:
+        sel_status = st.multiselect("상태 필터", statuses, default=statuses)
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    filtered = [e for e in events if e["출처"] in sel_source and e["status"] in sel_status]
 
-    # 3. 데이터프레임 필터링 적용
-    filtered_df = df[
-        (df["접속일자"].isin(selected_dates)) & 
-        (df["대상 경기"].isin(selected_games)) & 
-        (df["Status"].isin(selected_status))
-    ]
-    
-    if filtered_df.empty:
-        st.success("🎉 현재 설정된 필터 조건에 해당하는 데이터가 없습니다. (또는 모든 검토가 완료되었습니다!)")
+    if not filtered:
+        st.success("필터 조건에 해당하는 이벤트가 없습니다.")
         return
-        
-    # Render interactive cards for each filtered item
-    for _, row in filtered_df.iterrows():
-        event_id = row['Event ID']
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    for event in filtered:
         with st.container(border=True):
-            st.markdown(f"#### {event_id}")
-            
-            data_col1, data_col2, data_col3 = st.columns([1, 1, 1])
-            
-            with data_col1:
+            c1, c2, c3 = st.columns([1, 1, 1])
+            with c1:
+                st.caption("이벤트 정보")
+                st.markdown(f"**출처:** `{event['출처']}`  \n**Event ID:** `{event['event_id']}`")
+            with c2:
+                st.caption("사용자 정보")
+                st.markdown(f"**User ID:** `{event['user_id']}`  \n**IP:** `{event['ip_address']}`")
+            with c3:
                 st.caption("위험 지표")
-                st.markdown(f"**상태:** `{row['Status']}`  \n**Risk:** `{row['Risk Score']} 점`")
-            with data_col2:
-                st.caption("메타 데이터")
-                st.markdown(f"**탐지 유형:** {row['탐지유형']}  \n**대상:** {row['대상 경기']}")
-            with data_col3:
-                st.caption("발생 시점")
-                st.markdown(f"{row['접속시간']}  \n{row['접속IP']}")
-            
+                st.markdown(f"**Risk Score:** `{event['risk_score']}점`  \n**탐지:** {event['detected_at']}")
+
+            st.caption(f"탐지 사유: {event['reason_codes']}")
+
             st.markdown("<br>", unsafe_allow_html=True)
-            
-            # Action Buttons Row
+
             btn_col1, btn_col2, btn_col3 = st.columns(3)
             with btn_col1:
-                if st.button("🔍 매크로 탐지 원인 분석 리포트", key=f"report_{event_id}", width="stretch"):
-                    show_opensearch_report(event_id, row)
+                if st.button("🤖 LLM 심사 의견 요청", key=f"llm_review_{event['event_id']}", width="stretch"):
+                    with st.spinner("LLM 분석 중..."):
+                        st.session_state[f"llm_review_result_{event['event_id']}"] = _llm_review_analysis(event, summary_text)
             with btn_col2:
-                st.button(
-                    "🚫 수동 차단", 
-                    key=f"block_{event_id}", 
-                    type="primary",
-                    on_click=handle_review_action, 
-                    args=(event_id, "Blocked"),
-                    width="stretch"
-                )
+                if st.button("🚫 수동 차단", key=f"block_{event['event_id']}", type="primary", width="stretch"):
+                    provider.update_event_status(event["event_id"], "Blocked")
+                    st.toast(f"✅ {event['event_id']} 차단 처리 완료", icon="🚨")
             with btn_col3:
-                st.button(
-                    "✅ 통과 (Pass)", 
-                    key=f"pass_{event_id}", 
-                    on_click=handle_review_action, 
-                    args=(event_id, "Passed"),
-                    width="stretch"
-                )
+                if st.button("✅ 통과 (Pass)", key=f"pass_{event['event_id']}", width="stretch"):
+                    provider.update_event_status(event["event_id"], "Passed")
+                    st.toast(f"✅ {event['event_id']} 통과 처리 완료")
+
+            result_key = f"llm_review_result_{event['event_id']}"
+            if result_key in st.session_state:
+                st.markdown("**LLM 심사 의견**")
+                st.info(st.session_state[result_key])

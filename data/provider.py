@@ -84,6 +84,26 @@ class DataProvider(ABC):
         """
         pass
 
+    # ── 가드레일 차단 이벤트 목록 ──
+    @abstractmethod
+    def get_guardrail_events(self) -> list[dict]:
+        """
+        Returns:
+            list of {event_id, session_id, user_id, ip_address, risk_score,
+                     reason_codes, webdriver, headless, devtools_protocol,
+                     plugins_count, languages_count, blocked_at, status}
+        """
+        pass
+
+    # ── 마우스 매크로 세션 목록 ──
+    @abstractmethod
+    def get_mouse_macro_sessions(self) -> list[dict]:
+        """
+        Returns:
+            list of {session_id, probability, confidence, event_count, events, detected_at}
+        """
+        pass
+
 
 # ─────────────────────────────────────────────
 # 팩토리 함수

@@ -4,6 +4,7 @@ MockDataProvider — 기존 SQLite + 하드코딩 Mock 데이터 기반 구현�
 """
 import time
 import random
+import math
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -155,6 +156,96 @@ class MockDataProvider(DataProvider):
             "Type": ["Mouse Macro", "API Abuse", "Fast Click", "Proxy IP"],
             "Count": [240, 180, 140, 90]
         })
+
+    # ── 가드레일 차단 이벤트 목록 (Mock) ──
+    def get_guardrail_events(self) -> list[dict]:
+        return [
+            {
+                "event_id"         : "GR-1001",
+                "session_id"       : "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                "user_id"          : "user_20482",
+                "ip_address"       : "203.242.89.166",
+                "risk_score"       : 0.97,
+                "reason_codes"     : ["WEBDRIVER_DETECTED", "HEADLESS_BROWSER", "NO_PLUGINS"],
+                "webdriver"        : True,
+                "headless"         : True,
+                "devtools_protocol": False,
+                "plugins_count"    : 0,
+                "languages_count"  : 1,
+                "blocked_at"       : "2026-04-05T10:23:32+00:00",
+                "status"           : "Blocked",
+            },
+            {
+                "event_id"         : "GR-1002",
+                "session_id"       : "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+                "user_id"          : "user_38871",
+                "ip_address"       : "115.68.22.44",
+                "risk_score"       : 0.88,
+                "reason_codes"     : ["DEVTOOLS_PROTOCOL", "BHV_FAST_CLICK"],
+                "webdriver"        : False,
+                "headless"         : False,
+                "devtools_protocol": True,
+                "plugins_count"    : 2,
+                "languages_count"  : 1,
+                "blocked_at"       : "2026-04-05T10:41:15+00:00",
+                "status"           : "Blocked",
+            },
+            {
+                "event_id"         : "GR-1003",
+                "session_id"       : "c3d4e5f6-a7b8-9012-cdef-123456789012",
+                "user_id"          : None,
+                "ip_address"       : "91.108.4.200",
+                "risk_score"       : 0.73,
+                "reason_codes"     : ["DATACENTER_IP", "BHV_RETRY_BURST"],
+                "webdriver"        : False,
+                "headless"         : False,
+                "devtools_protocol": False,
+                "plugins_count"    : 5,
+                "languages_count"  : 2,
+                "blocked_at"       : "2026-04-05T11:02:58+00:00",
+                "status"           : "Pending",
+            },
+            {
+                "event_id"         : "GR-1004",
+                "session_id"       : "d4e5f6a7-b8c9-0123-defa-234567890123",
+                "user_id"          : "user_55129",
+                "ip_address"       : "58.229.10.83",
+                "risk_score"       : 0.91,
+                "reason_codes"     : ["WEBDRIVER_DETECTED", "PRECHECK_FAIL", "NO_PLUGINS"],
+                "webdriver"        : True,
+                "headless"         : False,
+                "devtools_protocol": False,
+                "plugins_count"    : 0,
+                "languages_count"  : 1,
+                "blocked_at"       : "2026-04-05T11:18:44+00:00",
+                "status"           : "Blocked",
+            },
+            {
+                "event_id"         : "GR-1005",
+                "session_id"       : "e5f6a7b8-c9d0-1234-efab-345678901234",
+                "user_id"          : "user_77340",
+                "ip_address"       : "195.206.105.217",
+                "risk_score"       : 0.62,
+                "reason_codes"     : ["BLACKLIST_IP"],
+                "webdriver"        : False,
+                "headless"         : False,
+                "devtools_protocol": False,
+                "plugins_count"    : 8,
+                "languages_count"  : 3,
+                "blocked_at"       : "2026-04-05T11:35:07+00:00",
+                "status"           : "Passed",
+            },
+        ]
+
+    # ── 마우스 매크로 세션 목록 ──
+    def get_mouse_macro_sessions(self) -> list[dict]:
+        """마우스 서버에서 수신된 실제 세션 데이터를 반환합니다."""
+        try:
+            from utils.blocked_db import list_mouse_macro_sessions, init_blocked_db
+            init_blocked_db()
+            return list_mouse_macro_sessions()
+        except Exception:
+            return []
 
     # ── 내부 헬퍼: SQLite에서 기본 데이터 로드 ──
     @staticmethod

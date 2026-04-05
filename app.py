@@ -8,6 +8,23 @@ import requests  # Grafana API 연동
 from datetime import datetime, timedelta
 import base64  # Basic Auth 인증용
 import urllib3  # SSL 경고 억제
+import threading
+
+
+@st.cache_resource
+def _start_api_server():
+    """FastAPI 수신 서버를 백그라운드 스레드로 실행합니다 (포트 8100)."""
+    import uvicorn
+    from server import app as fastapi_app
+    thread = threading.Thread(
+        target=lambda: uvicorn.run(fastapi_app, host="0.0.0.0", port=8100, log_level="warning"),
+        daemon=True,
+    )
+    thread.start()
+    return thread
+
+
+_start_api_server()
 
 # 앱 최상단에 배치
 
