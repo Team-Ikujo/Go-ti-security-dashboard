@@ -3,4 +3,5 @@
 # "production" → OpenSearch + 백엔드 API 연동 (실서비스용)
 
 [app]
-mode = "mock"
+#mode = "mock"
+mode = "production"
