@@ -6,7 +6,11 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "blocked_events.db")
+_DB_DIR = os.environ.get(
+    "DATABASE_DIR",
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+)
+DB_PATH = os.path.join(_DB_DIR, "blocked_events.db")
 
 
 def init_blocked_db():
