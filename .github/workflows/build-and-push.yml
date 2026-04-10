@@ -1,0 +1,74 @@
+name: Build & Push to Harbor
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'server.py'
+      - 'utils/**'
+      - 'Dockerfile'
+      - 'requirements-server.txt'
+      - '.github/workflows/build-and-push.yml'
+
+env:
+  REGISTRY: harbor.go-ti.shop
+  IMAGE_NAME: prod/goti-security-dashboard
+  K8S_REPO: Team-Ikujo/Goti-k8s
+  VALUES_FILE: environments/prod/goti-security-dashboard/values-aws.yaml
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: tag
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          TAG="prod-${{ github.run_number }}-${SHORT_SHA}"
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Image tag: ${TAG}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Harbor
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update image tag in Goti-k8s
+        env:
+          GH_TOKEN: ${{ secrets.GIT_PAT }}
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+
+          git clone https://x-access-token:${GH_TOKEN}@github.com/${{ env.K8S_REPO }}.git goti-k8s
+          cd goti-k8s
+
+          sed -i "s|tag: \"prod-.*\"|tag: \"${TAG}\"|" ${{ env.VALUES_FILE }}
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ${{ env.VALUES_FILE }}
+          git commit -m "[CD] goti-security-dashboard 이미지 태그 업데이트: ${TAG}"
+          git push
