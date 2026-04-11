@@ -93,14 +93,14 @@ func handleGetStatsSummary(w http.ResponseWriter, r *http.Request) {
 	db.QueryRow("SELECT COUNT(*) FROM mouse_macro_sessions").Scan(&mouseCount)
 
 	blockRate := 0.0
-	if total > 0 {
-		blockRate = 100.0
+	if total+mouseCount > 0 {
+		blockRate = float64(total) / float64(total+mouseCount) * 100.0
 	}
 
 	writeJSON(w, http.StatusOK, StatsSummary{
-		TotalAccess:      total,
+		TotalAccess:      total + mouseCount,
 		TotalAccessDelta: "+0",
-		UniqueUsers:      total,
+		UniqueUsers:      total + mouseCount,
 		UniqueUsersDelta: "+0",
 		BlockedCount:     total,
 		BlockedDelta:     "+0",
@@ -315,8 +315,8 @@ func handleGetDashboardOverview(w http.ResponseWriter, r *http.Request) {
 	db.QueryRow("SELECT COUNT(*) FROM mouse_macro_sessions").Scan(&mouseCount)
 
 	blockRate := 0.0
-	if total > 0 {
-		blockRate = 100.0
+	if total+mouseCount > 0 {
+		blockRate = float64(total) / float64(total+mouseCount) * 100.0
 	}
 
 	detectionTypes, _ := getDetectionTypeStats()
@@ -327,9 +327,9 @@ func handleGetDashboardOverview(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, DashboardOverview{
 		Stats: StatsSummary{
-			TotalAccess:      total,
+			TotalAccess:      total + mouseCount,
 			TotalAccessDelta: "+0",
-			UniqueUsers:      total,
+			UniqueUsers:      total + mouseCount,
 			UniqueUsersDelta: "+0",
 			BlockedCount:     total,
 			BlockedDelta:     "+0",
