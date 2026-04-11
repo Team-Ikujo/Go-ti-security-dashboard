@@ -74,6 +74,8 @@ func main() {
 	// ── AI 분석 (Upstage Solar) ───────────────
 	api.HandleFunc("/analysis/guardrail/{event_id}", handleAnalyzeGuardrail).Methods(http.MethodPost)
 	api.HandleFunc("/analysis/mouse-macro/{session_id}", handleAnalyzeMouseMacro).Methods(http.MethodPost)
+	api.HandleFunc("/analysis/ip/{ip_address}", handleAnalyzeIP).Methods(http.MethodPost)
+	api.HandleFunc("/analysis/ip-summary", handleGetIPSummary).Methods(http.MethodGet)
 
 	srv := &http.Server{
 		Addr:         "0.0.0.0:" + port,
@@ -101,6 +103,8 @@ func main() {
 	log.Printf("  GET  /api/v1/alerts")
 	log.Printf("  POST /api/v1/analysis/guardrail/{event_id}   ← Upstage Solar 분석")
 	log.Printf("  POST /api/v1/analysis/mouse-macro/{session_id} ← Upstage Solar 분석")
+	log.Printf("  POST /api/v1/analysis/ip/{ip_address}        ← IP 종합 분석")
+	log.Printf("  GET  /api/v1/analysis/ip-summary             ← IP별 탐지 요약")
 
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("[server] error: %v", err)

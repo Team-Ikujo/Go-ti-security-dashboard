@@ -265,6 +265,82 @@ func handleAnalyzeGuardrail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, AnalysisResponse{EventID: eventID, Analysis: analysis})
 }
 
+// POST /api/v1/analysis/ip/{ip_address}
+// 특정 IP의 모든 위반 이벤트를 Upstage Solar로 종합 분석합니다.
+func handleAnalyzeIP(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	ipAddress := vars["ip_address"]
+
+	events, err := getEventsByIP(ipAddress)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if len(events) == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "해당 IP의 탐지 이벤트가 없습니다"})
+		return
+	}
+
+	const sysPrompt = "당신은 사이버 보안 전문가로, IP 기반 위협 분석 및 악성 자동화 탐지를 전문으로 합니다."
+	analysis, err := callUpstage(sysPrompt, buildIPAnalysisPrompt(ipAddress, events))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, AnalysisResponse{EventID: ipAddress, Analysis: analysis})
+}
+
+// GET /api/v1/analysis/ip-summary
+// IP별 탐지 건수 및 최신 위반 요약을 반환합니다 (프론트 IP 분석 탭용).
+func handleGetIPSummary(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.Query(`
+		SELECT ip_address,
+		       COUNT(*) as total,
+		       MAX(risk_score) as max_risk,
+		       MIN(blocked_at) as first_seen,
+		       MAX(blocked_at) as last_seen,
+		       GROUP_CONCAT(DISTINCT detection_type) as types,
+		       SUM(CASE WHEN status = 'Blocked' THEN 1 ELSE 0 END) as blocked_count
+		FROM blocked_events
+		WHERE ip_address IS NOT NULL AND ip_address != ''
+		GROUP BY ip_address
+		ORDER BY total DESC
+		LIMIT 100`)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	type IPSummary struct {
+		IPAddress    string  `json:"ip_address"`
+		TotalEvents  int     `json:"total_events"`
+		BlockedCount int     `json:"blocked_count"`
+		MaxRisk      float64 `json:"max_risk"`
+		FirstSeen    string  `json:"first_seen"`
+		LastSeen     string  `json:"last_seen"`
+		Types        string  `json:"detection_types"`
+	}
+
+	var result []IPSummary
+	for rows.Next() {
+		var s IPSummary
+		if err := rows.Scan(
+			&s.IPAddress, &s.TotalEvents, &s.MaxRisk,
+			&s.FirstSeen, &s.LastSeen, &s.Types, &s.BlockedCount,
+		); err != nil {
+			continue
+		}
+		s.MaxRisk = s.MaxRisk * 100
+		result = append(result, s)
+	}
+	if result == nil {
+		result = []IPSummary{}
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 // POST /api/v1/analysis/mouse-macro/{session_id}
 // 마우스 매크로 세션을 Upstage Solar로 분석합니다.
 func handleAnalyzeMouseMacro(w http.ResponseWriter, r *http.Request) {

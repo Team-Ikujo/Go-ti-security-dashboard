@@ -245,3 +245,93 @@ func getMouseSessionByID(sessionID string) (*mouseAnalysisData, error) {
 	}
 	return &d, nil
 }
+
+// ─────────────────────────────────────────────
+// IP 분석
+// ─────────────────────────────────────────────
+
+type ipEventSummary struct {
+	EventID       string
+	DetectionType string
+	RiskScore     int
+	ReasonCodes   []string
+	Status        string
+	BlockedAt     string
+	Webdriver     bool
+	Headless      bool
+}
+
+func getEventsByIP(ipAddress string) ([]ipEventSummary, error) {
+	rows, err := db.Query(`
+		SELECT event_id, detection_type, risk_score, reason_codes,
+		       status, blocked_at, webdriver, headless
+		FROM blocked_events
+		WHERE ip_address = ?
+		ORDER BY blocked_at DESC
+		LIMIT 50`, ipAddress)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []ipEventSummary
+	for rows.Next() {
+		var s ipEventSummary
+		var rcJSON string
+		var webdriver, headless int
+		var riskScore float64
+		if err := rows.Scan(
+			&s.EventID, &s.DetectionType, &riskScore, &rcJSON,
+			&s.Status, &s.BlockedAt, &webdriver, &headless,
+		); err != nil {
+			continue
+		}
+		s.RiskScore = int(riskScore * 100)
+		s.Webdriver = webdriver == 1
+		s.Headless = headless == 1
+		json.Unmarshal([]byte(rcJSON), &s.ReasonCodes)
+		result = append(result, s)
+	}
+	return result, nil
+}
+
+func buildIPAnalysisPrompt(ipAddress string, events []ipEventSummary) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("다음은 IP 주소 %s 에서 발생한 탐지 이벤트 목록입니다.\n\n", ipAddress))
+	sb.WriteString(fmt.Sprintf("총 %d건의 위반 이벤트가 탐지되었습니다.\n\n", len(events)))
+
+	for i, e := range events {
+		codes := "없음"
+		if len(e.ReasonCodes) > 0 {
+			codes = strings.Join(e.ReasonCodes, ", ")
+		}
+		flags := []string{}
+		if e.Webdriver {
+			flags = append(flags, "Webdriver")
+		}
+		if e.Headless {
+			flags = append(flags, "Headless")
+		}
+		flagStr := "없음"
+		if len(flags) > 0 {
+			flagStr = strings.Join(flags, ", ")
+		}
+		sb.WriteString(fmt.Sprintf(
+			"%d. [%s] Event: %s | 탐지유형: %s | Risk: %d%% | 사유: %s | 브라우저 플래그: %s | 시각: %s\n",
+			i+1, e.Status, e.EventID[:min(14, len(e.EventID))],
+			e.DetectionType, e.RiskScore, codes, flagStr, e.BlockedAt[:min(19, len(e.BlockedAt))],
+		))
+	}
+
+	sb.WriteString(`
+위 데이터를 바탕으로 이 IP 주소의 활동을 분석해주세요:
+1. **위반 패턴 요약**: 어떤 유형의 위반을 반복적으로 저질렀는지
+2. **위험도 평가**: 이 IP가 악의적 자동화 도구(봇/매크로)일 가능성
+3. **주요 탐지 근거**: 가장 두드러지는 이상 지표 2~3가지
+4. **권고 조치**: 차단 유지, 모니터링 강화, 또는 해제 중 하나와 그 이유
+
+한국어로 간결하게 작성하세요.`)
+
+	return sb.String()
+}
+
