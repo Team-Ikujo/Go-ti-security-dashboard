@@ -107,6 +107,11 @@ type DashboardOverview struct {
 	RecentMouseMacro  []MouseMacroSessionRow `json:"recent_mouse_macro"`
 }
 
+type AnalysisResponse struct {
+	EventID  string `json:"event_id"`
+	Analysis string `json:"analysis"`
+}
+
 type AlertItem struct {
 	AlertID     string  `json:"alert_id"`
 	SessionID   string  `json:"session_id"`

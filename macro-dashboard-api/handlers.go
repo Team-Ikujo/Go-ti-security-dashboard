@@ -235,6 +235,62 @@ func handleGetRiskDistribution(w http.ResponseWriter, r *http.Request) {
 // Alerts
 // ─────────────────────────────────────────────
 
+// ─────────────────────────────────────────────
+// AI 분석 (Upstage Solar)
+// ─────────────────────────────────────────────
+
+// POST /api/v1/analysis/guardrail/{event_id}
+// 가드레일 차단 이벤트를 Upstage Solar로 분석합니다.
+func handleAnalyzeGuardrail(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	eventID := vars["event_id"]
+
+	data, err := getGuardrailEventByID(eventID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if data == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "event not found"})
+		return
+	}
+
+	const sysPrompt = "당신은 사이버 보안 전문가로, 웹 매크로/봇 탐지 시스템의 차단 로그를 분석하여 차단 원인을 명확하게 설명하는 역할을 합니다."
+	analysis, err := callUpstage(sysPrompt, buildGuardrailPrompt(*data))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, AnalysisResponse{EventID: eventID, Analysis: analysis})
+}
+
+// POST /api/v1/analysis/mouse-macro/{session_id}
+// 마우스 매크로 세션을 Upstage Solar로 분석합니다.
+func handleAnalyzeMouseMacro(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionID := vars["session_id"]
+
+	data, err := getMouseSessionByID(sessionID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if data == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		return
+	}
+
+	const sysPrompt = "당신은 사이버 보안 전문가로, 마우스 움직임 데이터를 분석하여 매크로/봇 여부를 판단하는 전문가입니다."
+	analysis, err := callUpstage(sysPrompt, buildMouseMacroPrompt(*data))
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, AnalysisResponse{EventID: sessionID, Analysis: analysis})
+}
+
 // GET /api/v1/alerts
 // 고위험(risk_score >= 0.8) 활성 알림 목록을 반환합니다.
 func handleGetAlerts(w http.ResponseWriter, r *http.Request) {

@@ -71,6 +71,10 @@ func main() {
 	// ── Alerts ───────────────────────────────
 	api.HandleFunc("/alerts", handleGetAlerts).Methods(http.MethodGet)
 
+	// ── AI 분석 (Upstage Solar) ───────────────
+	api.HandleFunc("/analysis/guardrail/{event_id}", handleAnalyzeGuardrail).Methods(http.MethodPost)
+	api.HandleFunc("/analysis/mouse-macro/{session_id}", handleAnalyzeMouseMacro).Methods(http.MethodPost)
+
 	srv := &http.Server{
 		Addr:         "0.0.0.0:" + port,
 		Handler:      r,
@@ -95,6 +99,8 @@ func main() {
 	log.Printf("  GET  /api/v1/analytics/hourly-trend")
 	log.Printf("  GET  /api/v1/analytics/risk-distribution")
 	log.Printf("  GET  /api/v1/alerts")
+	log.Printf("  POST /api/v1/analysis/guardrail/{event_id}   ← Upstage Solar 분석")
+	log.Printf("  POST /api/v1/analysis/mouse-macro/{session_id} ← Upstage Solar 분석")
 
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("[server] error: %v", err)

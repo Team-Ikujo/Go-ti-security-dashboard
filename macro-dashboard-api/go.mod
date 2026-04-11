@@ -1,6 +1,6 @@
 module macro-dashboard-api
 
-go 1.21
+go 1.25
 
 require (
 	github.com/gorilla/mux v1.8.1
