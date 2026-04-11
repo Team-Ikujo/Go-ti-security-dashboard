@@ -1,22 +1,38 @@
-FROM python:3.13-slim
+# ─────────────────────────────────────────────
+# Stage 1: Build
+# ─────────────────────────────────────────────
+FROM golang:1.21-alpine AS builder
+
+WORKDIR /build
+
+# 의존성 캐시 레이어 (소스 변경 시 재다운로드 방지)
+COPY macro-dashboard-api/go.mod macro-dashboard-api/go.sum ./
+RUN go mod download
+
+# 소스 복사 및 빌드
+COPY macro-dashboard-api/*.go ./
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+    go build -ldflags="-s -w" -trimpath -o macro-dashboard-api .
+
+# ─────────────────────────────────────────────
+# Stage 2: Runtime (distroless — ca-certs + tzdata 포함, shell 없음)
+# ─────────────────────────────────────────────
+FROM gcr.io/distroless/static-debian12:nonroot
 
 WORKDIR /app
 
-RUN useradd -u 1000 -m appuser
+COPY --from=builder /build/macro-dashboard-api .
 
-COPY requirements-server.txt .
-RUN pip install --no-cache-dir -r requirements-server.txt
+# PVC 마운트 포인트 (SQLite .db 파일 저장 경로)
+# K8s manifest에서 /data 를 PVC에 마운트하면 데이터가 영구 보존됩니다.
+ENV DATABASE_DIR=/data
+ENV PORT=8200
 
-COPY server.py .
-COPY utils/ utils/
+EXPOSE 8200
 
-RUN chown -R appuser:appuser /app
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["/app/macro-dashboard-api", "-healthcheck"]
 
-USER appuser
+USER nonroot
 
-EXPOSE 8100
-
-HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"
-
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8100"]
+ENTRYPOINT ["/app/macro-dashboard-api"]
