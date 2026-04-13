@@ -10,6 +10,7 @@ type BlockedEventRequest struct {
 	IPAddress        *string  `json:"ip_address,omitempty"`
 	RiskScore        float64  `json:"risk_score"`
 	ReasonCodes      []string `json:"reason_codes"`
+	DetectionType    string   `json:"detection_type,omitempty"`
 	Webdriver        bool     `json:"webdriver"`
 	Headless         bool     `json:"headless"`
 	DevtoolsProtocol bool     `json:"devtools_protocol"`

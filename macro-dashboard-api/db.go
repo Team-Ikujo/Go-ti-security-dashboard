@@ -51,6 +51,7 @@ func initDB() {
 			ip_address        TEXT,
 			risk_score        REAL,
 			reason_codes      TEXT,
+			detection_type    TEXT,
 			webdriver         INTEGER,
 			headless          INTEGER,
 			devtools_protocol INTEGER,
@@ -80,8 +81,9 @@ func initDB() {
 		log.Fatalf("create mouse_macro_sessions table: %v", err)
 	}
 
-	// 마이그레이션: user_id 컬럼 없으면 추가
+	// 마이그레이션: 기존 DB 컬럼 누락 시 추가
 	db.Exec("ALTER TABLE mouse_macro_sessions ADD COLUMN user_id TEXT")
+	db.Exec("ALTER TABLE blocked_events ADD COLUMN detection_type TEXT")
 }
 
 // ─────────────────────────────────────────────
@@ -116,9 +118,9 @@ func saveBlockedEvent(req BlockedEventRequest) (string, error) {
 	_, err := db.Exec(`
 		INSERT OR IGNORE INTO blocked_events
 			(event_id, session_id, user_id, ip_address, risk_score,
-			 reason_codes, webdriver, headless, devtools_protocol,
+			 reason_codes, detection_type, webdriver, headless, devtools_protocol,
 			 plugins_count, languages_count, blocked_at, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Blocked')
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Blocked')
 	`,
 		eventID,
 		req.SessionID,
@@ -126,6 +128,7 @@ func saveBlockedEvent(req BlockedEventRequest) (string, error) {
 		ipAddress,
 		req.RiskScore,
 		string(reasonJSON),
+		req.DetectionType,
 		boolToInt(req.Webdriver),
 		boolToInt(req.Headless),
 		boolToInt(req.DevtoolsProtocol),
@@ -150,17 +153,23 @@ func listBlockedEvents(limit int) ([]BlockedEventRow, error) {
 		var (
 			id, pluginsCount, languagesCount, webdriver, headless, devtoolsProto int
 			eventID, sessionID, blockedAt, status, reasonCodesJSON               string
-			userID, ipAddress                                                      sql.NullString
+			userID, ipAddress, detectionType                                      sql.NullString
 			riskScore                                                              float64
 		)
 		if err := rows.Scan(&id, &eventID, &sessionID, &userID, &ipAddress,
-			&riskScore, &reasonCodesJSON, &webdriver, &headless,
+			&riskScore, &reasonCodesJSON, &detectionType, &webdriver, &headless,
 			&devtoolsProto, &pluginsCount, &languagesCount, &blockedAt, &status); err != nil {
 			continue
 		}
 
 		var reasonCodes []string
 		json.Unmarshal([]byte(reasonCodesJSON), &reasonCodes)
+
+		// detection_type: DB 저장값 우선, 없으면 reason_codes로 추론
+		dt := detectionType.String
+		if dt == "" {
+			dt = reasonToDetectionType(reasonCodes)
+		}
 
 		datePart := ""
 		timePart := ""
@@ -177,7 +186,7 @@ func listBlockedEvents(limit int) ([]BlockedEventRow, error) {
 			AccessDate:     datePart,
 			AccessTime:     timePart,
 			IPAddress:      ipAddress.String,
-			DetectionType:  reasonToDetectionType(reasonCodes),
+			DetectionType:  dt,
 			Status:         status,
 			RiskScore:      int(riskScore * 100),
 			ReasonCodes:    reasonCodes,
