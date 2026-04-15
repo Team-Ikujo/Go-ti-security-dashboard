@@ -26,6 +26,8 @@ func main() {
 
 	// DB 초기화 (Python server와 동일한 blocked_events.db 공유)
 	initDB()
+	// DB가 비어 있을 때만 더미 데이터 삽입 (PVC 첫 마운트 시 자동 시딩)
+	seedDummyData()
 
 	port := os.Getenv("PORT")
 	if port == "" {
