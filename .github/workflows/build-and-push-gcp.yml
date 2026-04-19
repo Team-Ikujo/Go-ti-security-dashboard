@@ -1,0 +1,120 @@
+name: Build & Push to GCP Artifact Registry
+
+# 목적: macro-dashboard-api Go 바이너리를 GAR에 push → Goti-k8s PR 자동 생성
+# AWS(Harbor)는 build-and-push.yml이 병행 유지. 여기선 GCP prod-gcp 경로만 담당.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'macro-dashboard-api/**'
+      - 'Dockerfile'
+      - '.github/workflows/build-and-push-gcp.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: build-and-push-gcp
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GAR_REGISTRY: asia-northeast3-docker.pkg.dev
+  GAR_PROJECT: project-7b8317dd-9b4d-4f5f-ba2
+  GAR_REPOSITORY: goti-prod-registry
+  IMAGE_NAME: goti-security-dashboard-go
+  K8S_REPO: Team-Ikujo/Goti-k8s
+  VALUES_FILE: environments/prod-gcp/goti-security-dashboard/values.yaml
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.image.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: image
+        run: |
+          IMAGE_TAG="gcp-${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}"
+          echo "tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "Image tag: ${IMAGE_TAG}"
+
+      - name: Authenticate to GCP (WIF)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - name: Configure Docker for GAR
+        run: gcloud auth configure-docker ${{ env.GAR_REGISTRY }} --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.GAR_REGISTRY }}/${{ env.GAR_PROJECT }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ steps.image.outputs.tag }}
+          cache-from: type=gha,scope=gcp-security-dashboard
+          cache-to: type=gha,mode=max,scope=gcp-security-dashboard
+
+  update-k8s:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - name: Checkout Goti-k8s
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.K8S_REPO }}
+          token: ${{ secrets.GH_PAT }}
+          ref: main
+
+      - name: Install yq
+        run: |
+          wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          chmod +x /usr/local/bin/yq
+
+      - name: Update GCP prod image tag
+        run: |
+          IMAGE_TAG="${{ needs.build-and-push.outputs.image_tag }}"
+          NEW_REPO="${{ env.GAR_REGISTRY }}/${{ env.GAR_PROJECT }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}"
+
+          yq -i ".image.repository = \"${NEW_REPO}\"" "${{ env.VALUES_FILE }}"
+          yq -i ".image.tag = \"${IMAGE_TAG}\"" "${{ env.VALUES_FILE }}"
+          yq -i ".image.pullPolicy = \"IfNotPresent\"" "${{ env.VALUES_FILE }}"
+          echo "Updated ${{ env.VALUES_FILE }} → ${NEW_REPO}:${IMAGE_TAG}"
+
+      - name: Set short SHA
+        id: short_sha
+        run: echo "value=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GH_PAT }}
+          branch: chore/gcp-security-dashboard-${{ github.run_number }}-${{ steps.short_sha.outputs.value }}
+          commit-message: "[CHORE] GCP prod security-dashboard 이미지 태그 업데이트: ${{ needs.build-and-push.outputs.image_tag }}"
+          title: "[CHORE] GCP prod security-dashboard 이미지 태그 업데이트: ${{ needs.build-and-push.outputs.image_tag }}"
+          body: |
+            ## 변경 사항
+            - 이미지 태그: `${{ needs.build-and-push.outputs.image_tag }}`
+            - 레지스트리: `${{ env.GAR_REGISTRY }}/${{ env.GAR_PROJECT }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}`
+            - 대상 환경: GCP prod (`${{ env.VALUES_FILE }}`)
+
+            ## 트리거
+            - 레포: `Team-Ikujo/Go-ti-security-dashboard`
+            - 브랜치: `${{ github.ref_name }}`
+            - 커밋: ${{ github.sha }}
+            - 워크플로우: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          base: main
+          labels: chore,gcp,security-dashboard
